@@ -75,7 +75,9 @@ async function call(path, { method = "GET", body } = {}) {
   return data;
 }
 var api = {
-  summarize: (text) => call("/api/summarize", { method: "POST", body: { text, source: "extension" } }),
+  startSummary: (text) => call("/api/summarize", { method: "POST", body: { text, source: "extension" } }),
+  summaryStatus: (jobId) => call(`/api/summarize/${jobId}`),
+  cancelSummary: (jobId) => call(`/api/summarize/${jobId}`, { method: "DELETE" }),
   listPosts: () => call("/api/posts").then((d) => d.posts),
   createPost: (p) => call("/api/posts", { method: "POST", body: p }),
   overwritePost: (id, body) => call(`/api/posts/${id}`, { method: "PUT", body: { body } }),
@@ -139,6 +141,13 @@ var draftKey = (tabId) => `draft:${tabId}`;
 async function setDraft(tabId, draft) {
   await chrome.storage.session.set({ [draftKey(tabId)]: draft });
 }
+var POLL_MS = 3e3;
+var GIVE_UP_MS = 6 * 60 * 1e3;
+var polling = /* @__PURE__ */ new Set();
+async function getDraft(tabId) {
+  const { [draftKey(tabId)]: d } = await chrome.storage.session.get(draftKey(tabId));
+  return d || null;
+}
 async function summarizeTab(tabId) {
   const tab = await chrome.tabs.get(tabId);
   let extracted;
@@ -148,13 +157,54 @@ async function summarizeTab(tabId) {
     throw new Error("\uD398\uC774\uC9C0\uB97C \uC0C8\uB85C\uACE0\uCE68\uD55C \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
   }
   if (!extracted?.text) throw new Error("\uD654\uBA74\uC5D0\uC11C \uB300\uD654\uB97C \uCC3E\uC9C0 \uBABB\uD588\uC5B4\uC694. \uB300\uD654\uAC00 \uB2E4 \uBCF4\uC778 \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
-  await setDraft(tabId, { status: "loading", url: tab.url, turns: extracted.turns });
+  const startedAt = Date.now();
+  await setDraft(tabId, { status: "loading", url: tab.url, startedAt, chars: extracted.text.length });
+  const { jobId } = await api.startSummary(extracted.text);
+  await setDraft(tabId, { status: "loading", url: tab.url, startedAt, chars: extracted.text.length, jobId });
+  pollJob(tabId);
+}
+async function pollJob(tabId) {
+  if (polling.has(tabId)) return;
+  polling.add(tabId);
   try {
-    const res = await api.summarize(extracted.text);
-    await setDraft(tabId, { status: "done", url: tab.url, summary: res.summary, truncated: !!res.truncated, turns: extracted.turns });
-  } catch (e) {
-    await setDraft(tabId, { status: "error", url: tab.url, error: e.message });
+    for (; ; ) {
+      const draft = await getDraft(tabId);
+      if (!draft || draft.status !== "loading" || !draft.jobId) return;
+      if (Date.now() - draft.startedAt > GIVE_UP_MS) {
+        await setDraft(tabId, { ...draft, status: "error", error: "\uC694\uC57D\uC774 \uB05D\uB098\uC9C0 \uC54A\uC558\uC5B4\uC694. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694." });
+        return;
+      }
+      let res;
+      try {
+        res = await api.summaryStatus(draft.jobId);
+      } catch (e) {
+        if (e.status === 401 || e.status === 404) {
+          await setDraft(tabId, { ...draft, status: "error", error: e.message });
+          return;
+        }
+        res = null;
+      }
+      const latest = await getDraft(tabId);
+      if (!latest || latest.jobId !== draft.jobId || latest.status !== "loading") return;
+      if (res?.status === "done") {
+        await setDraft(tabId, { status: "done", url: draft.url, summary: res.summary, truncated: !!res.truncated });
+        return;
+      }
+      if (res?.status === "failed" || res?.status === "cancelled") {
+        await setDraft(tabId, { ...draft, status: "error", error: res.error || "\uC694\uC57D\uC774 \uC911\uC9C0\uB410\uC5B4\uC694." });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, POLL_MS));
+    }
+  } finally {
+    polling.delete(tabId);
   }
+}
+async function cancelTab(tabId) {
+  const draft = await getDraft(tabId);
+  await chrome.storage.session.remove(draftKey(tabId));
+  if (draft?.jobId) await api.cancelSummary(draft.jobId).catch(() => {
+  });
 }
 var handlers = {
   async state() {
@@ -166,6 +216,11 @@ var handlers = {
     return { email: s.email };
   },
   async logout() {
+    const all = await chrome.storage.session.get(null);
+    const keys = Object.keys(all).filter((k) => k.startsWith("draft:"));
+    await Promise.all(keys.map((k) => all[k]?.jobId && all[k]?.status === "loading" ? api.cancelSummary(all[k].jobId).catch(() => {
+    }) : null));
+    await chrome.storage.session.remove(keys);
     await logout();
     return {};
   },
@@ -178,10 +233,23 @@ var handlers = {
     }
     const site = siteFor(host);
     const { [draftKey(tabId)]: draft } = await chrome.storage.session.get(draftKey(tabId));
-    return { site: site ? { id: site.id, name: site.name } : null, draft: draft && draft.url === tab.url ? draft : null };
+    let current = draft && draft.url === tab.url ? draft : null;
+    if (current?.status === "loading" && (!current.jobId ? !current.startedAt || Date.now() - current.startedAt > 6e4 : Date.now() - current.startedAt > GIVE_UP_MS)) {
+      current = { ...current, status: "error", error: "\uC774\uC804 \uC694\uC57D\uC774 \uC911\uB2E8\uB410\uC5B4\uC694. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694." };
+      await setDraft(tabId, current);
+    }
+    if (current?.status === "loading" && current.jobId) pollJob(tabId);
+    return { site: site ? { id: site.id, name: site.name } : null, draft: current };
   },
   async summarize({ tabId }) {
-    summarizeTab(tabId).catch((e) => setDraft(tabId, { status: "error", error: e.message }));
+    summarizeTab(tabId).catch(async (e) => {
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      await setDraft(tabId, { status: "error", url: tab?.url, error: e.message });
+    });
+    return {};
+  },
+  async cancelSummary({ tabId }) {
+    await cancelTab(tabId);
     return {};
   },
   async clearDraft({ tabId }) {

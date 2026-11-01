@@ -40,10 +40,16 @@
     home: () => `${header()}
     <div class="card"><h1>${esc(state.site.name)} \uB300\uD654 \uC815\uB9AC</h1>
       <p class="muted">\uD604\uC7AC \uD654\uBA74\uC5D0 \uBD88\uB7EC\uC640\uC9C4 \uBA54\uC2DC\uC9C0\uAE4C\uC9C0 \uC2DC\uAC04\uC21C\uC73C\uB85C \uC694\uC57D\uD574\uC694. \uC811\uD78C \uBE14\uB85D\uC740 \uC81C\uC678\uB3FC\uC694.</p></div>
-    <button class="btn primary block" style="margin-top:12px" data-act="summarize">\uBCF8\uBB38 \uC804\uCCB4 \uC694\uC57D\uD558\uAE30</button>
-    ${state.error ? `<p class="err">${esc(state.error)}</p>` : ""}`,
+    ${state.error ? `<p class="err">${esc(state.error)}</p>` : ""}
+    <button class="btn primary block" style="margin-top:12px" data-act="summarize">${state.error ? "\uB2E4\uC2DC \uC2DC\uB3C4" : "\uBCF8\uBB38 \uC804\uCCB4 \uC694\uC57D\uD558\uAE30"}</button>`,
+    // 요약 중: 경과 시간 + 중지 버튼
     loading: () => `${header()}
-    <div class="center pad"><div class="spinner"></div><p class="muted">\uC694\uC57D\uD558\uB294 \uC911\uC774\uC5D0\uC694.<br/>\uCC3D\uC744 \uB2EB\uC544\uB3C4 \uACC4\uC18D \uC9C4\uD589\uB3FC\uC694.</p></div>`,
+    <div class="center" style="padding:24px 0 8px"><div class="spinner"></div>
+      <p class="muted">\uC694\uC57D\uD558\uB294 \uC911\uC774\uC5D0\uC694 \xB7 <b id="elapsed">${elapsedText()}</b><br/>\uAE34 \uB300\uD654\uB294 1~3\uBD84 \uAC78\uB9B4 \uC218 \uC788\uC5B4\uC694.<br/>\uCC3D\uC744 \uB2EB\uC544\uB3C4 \uACC4\uC18D \uC9C4\uD589\uB3FC\uC694.</p></div>
+    <div id="cancelBox" ${elapsedSec() >= CANCEL_AFTER_SEC ? "" : "hidden"}>
+      <button class="btn block" style="margin-top:14px" data-act="cancel">\uC694\uC57D \uC911\uC9C0</button>
+      <p class="muted center" style="font-size:12px;margin-top:8px">\uC911\uC9C0\uD558\uBA74 AI \uC694\uC57D\uB3C4 \uBC14\uB85C \uBA48\uCD94\uACE0, \uD558\uB8E8 \uD69F\uC218\uC5D0\uC11C \uBE60\uC838\uC694.</p>
+    </div>`,
     // EXT-03 요약 미리보기 + EXT-04 저장 방식 선택
     preview: () => `${header()}
     <div class="top"><h1>\uC694\uC57D \uBBF8\uB9AC\uBCF4\uAE30</h1><button class="back" data-act="resummarize">\uB2E4\uC2DC \uC694\uC57D</button></div>
@@ -74,6 +80,22 @@
     </div>
     <div class="row" style="margin-top:16px"><a class="btn primary" href="${SITE_URL}/posts/${esc(state.saved.id)}" target="_blank">\uBE14\uB85C\uADF8\uC5D0\uC11C \uBCF4\uAE30</a><button class="btn" data-act="close">\uB2EB\uAE30</button></div>`
   };
+  var CANCEL_AFTER_SEC = 180;
+  function elapsedSec() {
+    const start = state.draft?.startedAt;
+    return start ? Math.max(0, Math.floor((Date.now() - start) / 1e3)) : 0;
+  }
+  function elapsedText() {
+    const sec = elapsedSec();
+    return sec >= 60 ? `${Math.floor(sec / 60)}\uBD84 ${sec % 60}\uCD08` : `${sec}\uCD08`;
+  }
+  setInterval(() => {
+    if (state.view !== "loading") return;
+    const el = document.getElementById("elapsed");
+    if (el) el.textContent = elapsedText();
+    const box = document.getElementById("cancelBox");
+    if (box && elapsedSec() >= CANCEL_AFTER_SEC) box.hidden = false;
+  }, 1e3);
   function render() {
     const keepSummary = document.getElementById("summary");
     if (keepSummary) state.summary = keepSummary.value;
@@ -123,8 +145,16 @@
       go("login", { email: null });
     },
     async summarize() {
+      state.draft = { startedAt: Date.now() };
       go("loading");
       await send("summarize", { tabId: state.tabId });
+    },
+    async cancel(btn) {
+      btn.disabled = true;
+      btn.textContent = "\uC911\uC9C0\uD558\uB294 \uC911\u2026";
+      await send("cancelSummary", { tabId: state.tabId });
+      state.draft = null;
+      go("home", { error: "" });
     },
     resummarize: () => actions.summarize(),
     toPreview: () => go("preview"),
