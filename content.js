@@ -46,6 +46,72 @@ ${t.text}`).join("\n\n");
     return res.data;
   }
 
+  // src/datetime.js
+  var pad = (n) => String(n).padStart(2, "0");
+  function nowLabel(d = /* @__PURE__ */ new Date()) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function labelFor(text, clickedAt = /* @__PURE__ */ new Date()) {
+    let date = null;
+    let m = text.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+    if (m) date = `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    if (!date) {
+      m = text.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+      if (m) date = `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    }
+    const t = text.match(/(?<!\d)([01]?\d|2[0-3])\s*:\s*([0-5]\d)(?!\d)/);
+    const time = t ? `${pad(t[1])}:${t[2]}` : null;
+    if (date) return time ? `${date} ${time}` : date;
+    if (time) return `${nowLabel(clickedAt).slice(0, 10)} ${time}`;
+    return nowLabel(clickedAt);
+  }
+
+  // src/quoteCode.js
+  var cleanName = (name) => name.replace(/[()\[\]\n:："“”]/g, " ").replace(/\s+/g, " ").trim();
+  var cleanText = (t) => t.replace(/\[([^\[\]\n]+)\]/g, "\u2039$1\u203A");
+  var cleanLine = (t) => cleanText(t).replace(/["“”]\s*\)/g, (s) => s.replace(")", " )")).trim();
+  function splitDialogue(src) {
+    const text = src.replace(/\r\n/g, "\n").trim();
+    if (!/["“”]/.test(text)) return text ? [{ kind: "line", text }] : [];
+    const parts = [];
+    let buf = "";
+    let inQuote = false;
+    const straight = (text.match(/"/g) || []).length;
+    if (straight % 2 === 1) {
+      const i = text.indexOf('"');
+      const before = text[i - 1] || "";
+      const after = text[i + 1] || "";
+      if (i > 0 && /[^\s(\[]/.test(before) && (!after || /[\s.,!?…~)\]]/.test(after))) inQuote = true;
+    }
+    const flush = (kind) => {
+      const t = buf.trim();
+      if (t) parts.push({ kind, text: t });
+      buf = "";
+    };
+    for (const ch of text) {
+      if (ch === "\u201C" && !inQuote) {
+        flush("text");
+        inQuote = true;
+      } else if (ch === "\u201D" && inQuote) {
+        flush("line");
+        inQuote = false;
+      } else if (ch === "\u201D" && !inQuote) {
+        flush("line");
+      } else if (ch === '"') {
+        flush(inQuote ? "line" : "text");
+        inQuote = !inQuote;
+      } else {
+        buf += ch;
+      }
+    }
+    flush(inQuote ? "line" : "text");
+    return parts;
+  }
+  function buildQuoteCode(name, src) {
+    const n = cleanName(name);
+    return splitDialogue(src).map((p) => p.kind === "line" ? `(${n}:"${cleanLine(p.text)}")` : cleanText(p.text)).join(" ");
+  }
+
   // src/content.js
   var site = siteFor(location.hostname);
   chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
@@ -79,7 +145,10 @@ ${t.text}`).join("\n\n");
 .item .t { font-size: 14px; font-weight: 700; color: #111828; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item .p { font-size: 11.5px; color: #4b5563; margin-top: 2px; }
 .form { padding: 0 14px 14px; }
-.preview { font-size: 12.5px; line-height: 1.6; color: #1f2937; border: 1px solid #c5c5c7; border-radius: 10px; padding: 8px 10px; max-height: 84px; overflow: auto; white-space: pre-wrap; }
+.preview { font-size: 12.5px; line-height: 1.65; color: #1f2937; border: 1px solid #c5c5c7; border-radius: 10px; padding: 8px 10px; max-height: 120px; overflow: auto; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.preview .lb { font-weight: 700; color: #111828; }
+.preview .q { font-weight: 700; color: #e7792a; }
+.hint { font-size: 11.5px; color: #6b7280; margin: 6px 0 0; line-height: 1.5; }
 .label { font-size: 12px; font-weight: 600; color: #4b5563; margin: 12px 0 6px; }
 .name { width: 100%; height: 36px; border: 1px solid #6b7380; border-radius: 10px; padding: 0 10px; font-size: 14px; background: transparent; color: #111828; outline: none; }
 .name:focus { border-color: #111828; }
@@ -196,7 +265,8 @@ ${t.text}`).join("\n\n");
           showList();
         });
         const names = post.speakers || [];
-        body.innerHTML = `<div class="form"><div class="preview">${esc(pendingText)}</div>
+        body.innerHTML = `<div class="form"><div class="label" style="margin-top:0">\uC800\uC7A5\uB420 \uB0B4\uC6A9</div><div class="preview"></div>
+        <p class="hint">\uB530\uC634\uD45C \uC548\uC740 \uB300\uC0AC, \uB098\uBA38\uC9C0\uB294 \uC9C0\uBB38\uC73C\uB85C \uC800\uC7A5\uB3FC\uC694. \uC800\uC7A5 \uD6C4 \uC6F9\uC5D0\uC11C \uACE0\uCE60 \uC218 \uC788\uC5B4\uC694.</p>
         <div class="label">\uB9D0\uD55C \uC0AC\uB78C</div><input class="name" maxlength="40" placeholder="\uC608: SEVERO" />
         ${names.length ? `<div class="chips">${names.map((n) => `<button type="button" class="chip">${esc(n)}</button>`).join("")}</div>` : ""}
         <p class="err-inline" hidden></p><button type="button" class="save">\uC778\uC6A9\uC73C\uB85C \uC800\uC7A5</button></div>`;
@@ -204,7 +274,17 @@ ${t.text}`).join("\n\n");
         const err = body.querySelector(".err-inline");
         const save = body.querySelector(".save");
         if (names[0]) input.value = names[0];
-        const sync = () => body.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.textContent === input.value.trim()));
+        const preview = body.querySelector(".preview");
+        const label = labelFor(pendingText, /* @__PURE__ */ new Date());
+        const renderPreview = () => {
+          const code = buildQuoteCode(input.value.trim() || "\uC774\uB984", pendingText);
+          const html = esc(code).replace(/\([^()\n]*?:&quot;[\s\S]*?&quot;\)/g, (m) => `<span class="q">${m}</span>`);
+          preview.innerHTML = `<span class="lb">[${esc(label)}]</span> ${html}`;
+        };
+        const sync = () => {
+          body.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.textContent === input.value.trim()));
+          renderPreview();
+        };
         sync();
         input.addEventListener("input", sync);
         body.querySelectorAll(".chip").forEach(
