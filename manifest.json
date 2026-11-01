@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Summerer",
+  "short_name": "Summerer",
+  "description": "AI 채팅을 요약해 Summerer 블로그에 타임라인으로 저장합니다.",
+  "version": "0.2.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7Cs3eDFuM9hsWP7T+Dx+O1UgFGJz0JuUFdzawpOdba1TnuwD0yHEpDUOqeM3Yvxfgr8oSbEpoglPuWeSP+TXInjhCKRtzqSr8PfTD4yhbHjkEn54aI4XsM/I1KMYsX6xmZ7lA7SW0QX7UOX72GPrQ4/RIxSqHyG4kA1E1CTpPwYJkoOSKCFSMZqqensagNjVbAlmO7uu/oocdTik2QRk6smXuTCd/vMWPXNnw05yOg2mNOyVrkLbuw+Clxfy5mAjDFD6Cvkdwy6/fR68cfGgIL/rT5Y6QCry7U1WeCIWeudCDoGJP247aYHwYyKjb5KLA6zWP3//SI/e1zCzl9zwFwIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Summerer"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "identity",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://summerer.vercel.app/*",
+    "https://caveduck.io/*",
+    "https://*.caveduck.io/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://caveduck.io/*",
+        "https://*.caveduck.io/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
