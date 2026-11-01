@@ -82,7 +82,7 @@ var api = {
   createPost: (p) => call("/api/posts", { method: "POST", body: p }),
   overwritePost: (id, body) => call(`/api/posts/${id}`, { method: "PUT", body: { body } }),
   prependPost: (id, label, text) => call(`/api/posts/${id}/prepend`, { method: "POST", body: { label, text } }),
-  quotePost: (id, label, name, text) => call(`/api/posts/${id}/quote`, { method: "POST", body: { label, name, text } })
+  quotePost: (id, code) => call(`/api/posts/${id}/quote`, { method: "POST", body: { code } })
 };
 
 // src/datetime.js
@@ -262,7 +262,7 @@ var handlers = {
   // EXT-09 드래그한 내용을 선택한 글 앞에 덧붙이기
   prependPost: ({ id, text, clickedAt }) => api.prependPost(id, labelFor(text, new Date(clickedAt)), text),
   // EXT-08 드래그한 대사를 선택한 글의 인용(QUOTE) 앞에 저장
-  quotePost: ({ id, name, text, clickedAt }) => api.quotePost(id, labelFor(text, new Date(clickedAt)), name, text)
+  quotePost: ({ id, code }) => api.quotePost(id, code)
 };
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const h = handlers[msg?.type];

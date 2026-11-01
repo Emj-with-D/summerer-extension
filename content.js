@@ -130,7 +130,7 @@ ${t.text}`).join("\n\n");
 .fab button { border: 0; background: none; color: #fff; font-size: 12.5px; font-weight: 600; height: 26px; padding: 0 9px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 .fab button:hover { background: rgba(255,255,255,.14); }
 .fab .bar { width: 1px; height: 14px; background: rgba(255,255,255,.28); }
-.panel { position: fixed; z-index: 2147483647; width: 300px; max-height: 390px; display: flex; flex-direction: column; background: #f8f7f2; color: #1f2937;
+.panel { position: fixed; z-index: 2147483647; width: 300px; max-height: min(480px, calc(100vh - 24px)); display: flex; flex-direction: column; background: #f8f7f2; color: #1f2937;
   border: 1px solid #dfdedc; border-radius: 14px; box-shadow: 0 12px 36px rgba(17,24,40,.22); overflow: hidden; }
 .head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px; }
 .title { font-size: 14px; font-weight: 700; color: #111828; }
@@ -145,9 +145,16 @@ ${t.text}`).join("\n\n");
 .item .t { font-size: 14px; font-weight: 700; color: #111828; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item .p { font-size: 11.5px; color: #4b5563; margin-top: 2px; }
 .form { padding: 0 14px 14px; }
-.preview { font-size: 12.5px; line-height: 1.65; color: #1f2937; border: 1px solid #c5c5c7; border-radius: 10px; padding: 8px 10px; max-height: 120px; overflow: auto; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
-.preview .lb { font-weight: 700; color: #111828; }
-.preview .q { font-weight: 700; color: #e7792a; }
+.editbox { position: relative; height: 132px; border: 1px solid #c5c5c7; border-radius: 10px; }
+.editbox:focus-within { border-color: #111828; }
+.editbox .hl, .editbox textarea { position: absolute; inset: 0; margin: 0; box-sizing: border-box; padding: 8px 10px; font-family: inherit; font-size: 12.5px; line-height: 1.65; font-weight: 400; letter-spacing: normal; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; scrollbar-gutter: stable; border: 0; border-radius: 10px; }
+.editbox .hl { overflow: hidden; color: #1f2937; pointer-events: none; }
+.editbox textarea { width: 100%; height: 100%; resize: none; overflow-y: auto; background: transparent; color: transparent; caret-color: #111828; outline: none; }
+.editbox textarea::selection { background: #cfd6e3; color: transparent; }
+.editbox .lb { color: #111828; -webkit-text-stroke: 0.55px currentColor; }
+.editbox .q { color: #e7792a; -webkit-text-stroke: 0.55px currentColor; }
+.hintrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.reset { flex: none; border: 0; background: none; padding: 6px 0 0; font: inherit; font-size: 11.5px; color: #111828; text-decoration: underline; cursor: pointer; }
 .hint { font-size: 11.5px; color: #6b7280; margin: 6px 0 0; line-height: 1.5; }
 .label { font-size: 12px; font-weight: 600; color: #4b5563; margin: 12px 0 6px; }
 .name { width: 100%; height: 36px; border: 1px solid #6b7380; border-radius: 10px; padding: 0 10px; font-size: 14px; background: transparent; color: #111828; outline: none; }
@@ -217,7 +224,7 @@ ${t.text}`).join("\n\n");
       panel = document.createElement("div");
       panel.className = "panel";
       panel.style.left = `${clamp(anchor.x - 8, 8, innerWidth - 308)}px`;
-      panel.style.top = `${clamp(anchor.y, 8, innerHeight - 398)}px`;
+      panel.style.top = `${clamp(anchor.y, 8, Math.max(8, innerHeight - 492))}px`;
       panel.innerHTML = `<div class="head"><span class="title">${isQuote ? "\uC778\uC6A9\uC73C\uB85C \uC800\uC7A5\uD560 \uAE00 \uC120\uD0DD" : "\uB367\uBD99\uC77C \uAE00 \uC120\uD0DD"}</span><button class="x" aria-label="\uB2EB\uAE30">\xD7</button></div>
       <div class="sub">${isQuote ? "\uC120\uD0DD\uD55C \uAE00\uC758 QUOTE \uB9E8 \uC55E\uC5D0 \uB300\uC0AC\uB85C \uC800\uC7A5\uB3FC\uC694." : "\uC120\uD0DD\uD55C \uAE00\uC758 \uC694\uC57D \uB9E8 \uC55E\uC5D0 \uB0A0\uC9DC\xB7\uC2DC\uAC04\uACFC \uD568\uAED8 \uCD94\uAC00\uB3FC\uC694."}</div><div class="body"><p class="msg">\uAE00 \uBAA9\uB85D\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\u2026</p></div>`;
       panel.querySelector(".x").addEventListener("click", closePanel);
@@ -265,8 +272,9 @@ ${t.text}`).join("\n\n");
           showList();
         });
         const names = post.speakers || [];
-        body.innerHTML = `<div class="form"><div class="label" style="margin-top:0">\uC800\uC7A5\uB420 \uB0B4\uC6A9</div><div class="preview"></div>
-        <p class="hint">\uB530\uC634\uD45C \uC548\uC740 \uB300\uC0AC, \uB098\uBA38\uC9C0\uB294 \uC9C0\uBB38\uC73C\uB85C \uC800\uC7A5\uB3FC\uC694. \uC800\uC7A5 \uD6C4 \uC6F9\uC5D0\uC11C \uACE0\uCE60 \uC218 \uC788\uC5B4\uC694.</p>
+        body.innerHTML = `<div class="form"><div class="label" style="margin-top:0">\uC800\uC7A5\uB420 \uB0B4\uC6A9</div>
+        <div class="editbox"><div class="hl" aria-hidden="true"></div><textarea class="code" spellcheck="false" aria-label="\uC800\uC7A5\uB420 \uB0B4\uC6A9"></textarea></div>
+        <div class="hintrow"><p class="hint">\uB530\uC634\uD45C \uC548\uC740 \uB300\uC0AC, \uB098\uBA38\uC9C0\uB294 \uC9C0\uBB38\uC774\uC5D0\uC694. \uC5EC\uAE30\uC11C \uBC14\uB85C \uACE0\uCE60 \uC218 \uC788\uC5B4\uC694.</p><button type="button" class="reset" hidden>\uCC98\uC74C\uB300\uB85C</button></div>
         <div class="label">\uB9D0\uD55C \uC0AC\uB78C</div><input class="name" maxlength="40" placeholder="\uC608: SEVERO" />
         ${names.length ? `<div class="chips">${names.map((n) => `<button type="button" class="chip">${esc(n)}</button>`).join("")}</div>` : ""}
         <p class="err-inline" hidden></p><button type="button" class="save">\uC778\uC6A9\uC73C\uB85C \uC800\uC7A5</button></div>`;
@@ -274,17 +282,40 @@ ${t.text}`).join("\n\n");
         const err = body.querySelector(".err-inline");
         const save = body.querySelector(".save");
         if (names[0]) input.value = names[0];
-        const preview = body.querySelector(".preview");
+        const code = body.querySelector(".code");
+        const back = body.querySelector(".hl");
+        const reset = body.querySelector(".reset");
         const label = labelFor(pendingText, /* @__PURE__ */ new Date());
-        const renderPreview = () => {
-          const code = buildQuoteCode(input.value.trim() || "\uC774\uB984", pendingText);
-          const html = esc(code).replace(/\([^()\n]*?:&quot;[\s\S]*?&quot;\)/g, (m) => `<span class="q">${m}</span>`);
-          preview.innerHTML = `<span class="lb">[${esc(label)}]</span> ${html}`;
+        let edited = false;
+        const paint = () => {
+          const html = esc(code.value).replace(/\[[^\[\]\n]*\]/g, (m) => `<span class="lb">${m}</span>`).replace(/\(\s*[^()\[\]\n:：]+?\s*[:：]\s*(?:&quot;|[“”])[\s\S]*?(?:&quot;|[“”])\s*\)/g, (m) => `<span class="q">${m}</span>`);
+          back.innerHTML = html + "\n";
+          back.scrollTop = code.scrollTop;
+        };
+        const regenerate = () => {
+          code.value = `[${label}] ` + buildQuoteCode(input.value.trim() || "\uC774\uB984", pendingText);
+          paint();
         };
         const sync = () => {
           body.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.textContent === input.value.trim()));
-          renderPreview();
+          if (!edited) regenerate();
         };
+        code.addEventListener("input", () => {
+          edited = true;
+          reset.hidden = false;
+          paint();
+        });
+        code.addEventListener("scroll", () => back.scrollTop = code.scrollTop);
+        code.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing) submit();
+          if (e.key === "Escape") closePanel();
+        });
+        reset.addEventListener("click", () => {
+          edited = false;
+          reset.hidden = true;
+          regenerate();
+        });
         sync();
         input.addEventListener("input", sync);
         body.querySelectorAll(".chip").forEach(
@@ -297,7 +328,13 @@ ${t.text}`).join("\n\n");
         input.select();
         const submit = async () => {
           const name = input.value.trim();
-          if (!name) {
+          const text = code.value.trim();
+          if (!text) {
+            err.hidden = false;
+            err.textContent = "\uC800\uC7A5\uD560 \uB0B4\uC6A9\uC774 \uC5C6\uC5B4\uC694.";
+            return code.focus();
+          }
+          if (!name && !edited) {
             err.hidden = false;
             err.textContent = "\uB9D0\uD55C \uC0AC\uB78C \uC774\uB984\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.";
             return input.focus();
@@ -305,7 +342,7 @@ ${t.text}`).join("\n\n");
           save.disabled = true;
           save.textContent = "\uC800\uC7A5 \uC911\u2026";
           try {
-            await send("quotePost", { id: post.id, name, text: pendingText, clickedAt: Date.now() });
+            await send("quotePost", { id: post.id, code: text });
             done(`\u2018${post.title || "\uAE00"}\u2019 QUOTE\uC5D0 \uC800\uC7A5\uD588\uC5B4\uC694`);
           } catch (e) {
             err.hidden = false;
